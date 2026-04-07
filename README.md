@@ -149,7 +149,14 @@ Creates `~/.claude/` and `~/.ccm/providers/`.
 
 ### [4/8] Onboarding bypass
 
-Writes `hasCompletedOnboarding: true` to `~/.claude.json` (uses python3 for safe JSON merge if available). Creates `api-key-helper.sh` which is an official Claude Code feature — when referenced in `settings.json`, Claude Code calls it for the API key instead of doing OAuth. No browser. No Anthropic contact.
+Writes two keys to `~/.claude.json`:
+
+- `hasCompletedOnboarding: true` — bypasses the browser login flow.
+- `theme: "dark"` — terminal UI theme. **Note:** theme lives in `~/.claude.json`, not `~/.claude/settings.json`. Putting it in settings.json triggers a schema validation error because theme is a runtime preference, not a documented settings field.
+
+Uses python3 for safe JSON merge if available (preserves any existing OAuth tokens or session state). Falls back to overwrite if python3 isn't installed.
+
+Then creates `api-key-helper.sh` — an official Claude Code feature. When `settings.json` points to this script, Claude Code calls it for the API key instead of running OAuth. No browser. No Anthropic contact.
 
 The actual API key is stored in `~/.claude/.api-key` (chmod 600) and the helper just `cat`s it. This avoids shell escaping issues with special characters in keys.
 
@@ -159,7 +166,7 @@ Creates `~/.ccm/providers/*.env` for the 5 default providers (glm, deepseek, kim
 
 ### [6/8] Settings
 
-Writes `~/.claude/settings.json` with:
+Writes `~/.claude/settings.json` validated against the official schema at `https://json.schemastore.org/claude-code-settings.json`. Contains `apiKeyHelper`, `model`, `env` (telemetry kills), and `permissions`. Theme is **not** here — it lives in `~/.claude.json` (see step 4).
 
 **Telemetry kill chain** (all in the `env` block):
 
@@ -174,13 +181,14 @@ Writes `~/.claude/settings.json` with:
 | `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | Auto-memory writes + prompt injection |
 | `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` | Background agents (autoDream, team memory sync) |
 
-**Auto-update: three layers**
+**Auto-update: two layers**
 
 | Layer | Mechanism |
 |---|---|
-| `autoUpdates: false` | Settings-level flag |
-| `DISABLE_AUTOUPDATER=1` | Process env var |
+| `DISABLE_AUTOUPDATER=1` | Process env var (only valid disable method per schema) |
 | `chmod 555` on binary | Filesystem hard block |
+
+Note: there is no `autoUpdates` field in the official schema. The schema only has `autoUpdatesChannel` (`"stable"` or `"latest"`) which controls *which* version gets installed, not whether updates run. The only documented way to fully disable updates is `DISABLE_AUTOUPDATER=1`. The chmod adds a filesystem-level hard block as a second layer.
 
 > Do NOT set `OTEL_METRICS_EXPORTER=none` — it crashes Claude Code. `OTEL_SDK_DISABLED=true` is the safe alternative.
 
@@ -249,6 +257,8 @@ You should see connections to Z.AI / your provider. You should NOT see `anthropi
 ---
 
 ## Troubleshooting
+
+**"Settings Error: $schema Invalid value" on launch** — your `settings.json` references the wrong schema URL. The correct one is `https://json.schemastore.org/claude-code-settings.json`. The script v4.1+ uses the right one. If you're upgrading from an older version, re-run the script to regenerate.
 
 **"Missing API key" on launch** — the api-key-helper chain is broken.
 

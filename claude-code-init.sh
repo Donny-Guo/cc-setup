@@ -86,7 +86,7 @@ CLAUDE_JSON="$HOME/.claude.json"
 [ -f "$CLAUDE_JSON" ] && cp "$CLAUDE_JSON" "${CLAUDE_JSON}.bak"
 
 if command -v python3 &>/dev/null; then
-    python3 << 'PYEOF'
+    PYTHEME="$PREFERRED_THEME" python3 << 'PYEOF'
 import json, os
 path = os.path.expanduser("~/.claude.json")
 try:
@@ -95,13 +95,14 @@ try:
 except Exception:
     data = {}
 data["hasCompletedOnboarding"] = True
+data["theme"] = os.environ.get("PYTHEME", "dark")
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
 PYEOF
-    ok "hasCompletedOnboarding → true (merged)"
+    ok "hasCompletedOnboarding → true, theme → $PREFERRED_THEME (merged)"
 else
-    printf '{\n  "hasCompletedOnboarding": true\n}\n' > "$CLAUDE_JSON"
-    ok "hasCompletedOnboarding → true (created)"
+    printf '{\n  "hasCompletedOnboarding": true,\n  "theme": "%s"\n}\n' "$PREFERRED_THEME" > "$CLAUDE_JSON"
+    ok "hasCompletedOnboarding → true, theme → $PREFERRED_THEME (created)"
 fi
 
 cat > "$HOME/.claude/api-key-helper.sh" << 'KEYEOF'
@@ -207,16 +208,18 @@ echo "[6/8] Settings"
 
 cat > "$HOME/.claude/settings.json" << SETTINGSEOF
 {
-  "\$schema": "https://schemas.anthropic.com/claude-code/settings.json",
+  "\$schema": "https://json.schemastore.org/claude-code-settings.json",
 
   "apiKeyHelper": "$HOME/.claude/api-key-helper.sh",
 
-  "theme": "$PREFERRED_THEME",
-  "alwaysThinkingEnabled": true,
-  "autoUpdates": false,
+  "model": "glm-5.1",
 
   "env": {
     "ANTHROPIC_BASE_URL":                       "https://api.z.ai/api/anthropic",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL":             "glm-5.1",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL":           "glm-5.1",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL":            "glm-4.5-air",
+
     "DISABLE_AUTOUPDATER":                      "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "DISABLE_TELEMETRY":                        "1",
@@ -226,31 +229,30 @@ cat > "$HOME/.claude/settings.json" << SETTINGSEOF
     "OTEL_SDK_DISABLED":                        "true",
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY":          "1",
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS":     "1",
+
     "API_TIMEOUT_MS":                           "300000"
   },
 
-  "models": {
-    "default": "glm-5.1",
-    "fast":    "glm-4.5-air",
-    "smart":   "glm-5.1"
-  },
-
   "permissions": {
+    "defaultMode": "default",
     "allow": [
-      "Bash(git *)",
-      "Bash(npm run *)",
-      "Bash(npx *)",
-      "Bash(node *)",
-      "Bash(cat *)",
-      "Bash(ls *)",
-      "Bash(find *)",
-      "Bash(grep *)"
+      "Bash(git:*)",
+      "Bash(npm run:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Read(~/**)"
     ],
     "deny": [
-      "Bash(rm -rf /)",
-      "Bash(rm -rf ~)",
-      "Bash(sudo rm *)",
-      "Read(**/.env)"
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(curl:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
     ]
   }
 }
@@ -258,7 +260,7 @@ SETTINGSEOF
 
 ok "model: glm-5.1 → api.z.ai"
 ok "telemetry: 8 kill vars set"
-ok "auto-update: 3 layers (config + env + chmod)"
+ok "auto-update: 2 layers (DISABLE_AUTOUPDATER + chmod 555)"
 echo ""
 
 # ═════════════════════════════════════════════════════════════
@@ -581,15 +583,18 @@ fi
 # Critical settings
 SF="$HOME/.claude/settings.json"
 _chk() { grep -q "$1" "$SF" 2>/dev/null && ok "$2" || warn "$2 — not found"; }
-_chk '"autoUpdates": false'                          "autoUpdates: false"
 _chk 'DISABLE_AUTOUPDATER'                           "DISABLE_AUTOUPDATER"
 _chk 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'      "nonessential traffic blocked"
 _chk 'DISABLE_TELEMETRY'                             "telemetry disabled"
 _chk 'OTEL_SDK_DISABLED'                             "OpenTelemetry killed"
 _chk 'CLAUDE_CODE_DISABLE_AUTO_MEMORY'               "auto-memory disabled"
 _chk 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS'          "background tasks disabled"
-_chk 'glm-5.1'                                       "model: glm-5.1"
+_chk '"model": "glm-5.1"'                            "model: glm-5.1"
 _chk 'api.z.ai'                                       "base URL: api.z.ai"
+
+# Theme is in ~/.claude.json, not settings.json
+grep -q "\"theme\"" "$HOME/.claude.json" 2>/dev/null && ok "theme set in ~/.claude.json" \
+    || warn "theme not set"
 
 # Onboarding
 grep -q 'hasCompletedOnboarding' "$HOME/.claude.json" 2>/dev/null \
